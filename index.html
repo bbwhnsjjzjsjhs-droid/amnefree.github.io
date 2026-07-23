@@ -2,63 +2,134 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Генератор WireGuard / AmneziaWG</title>
   <style>
-    body { font-family: sans-serif; background: #121212; color: #fff; max-width: 800px; margin: 40px auto; padding: 0 20px; }
-    button, a { background: #f6821f; color: #fff; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; font-weight: bold; }
-    pre { background: #1e1e1e; padding: 20px; border-radius: 8px; color: #00ff66; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
-    .hidden { display: none; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #121212;
+      color: #e0e0e0;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    button, a.download-btn {
+      background-color: #f6821f;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    button:hover, a.download-btn:hover {
+      background-color: #e06d10;
+    }
+    button:disabled {
+      background-color: #555;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    a.download-btn.hidden {
+      display: none;
+    }
+    pre {
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      color: #00ff66;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-size: 14px;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
+
   <h2>Генератор WireGuard / AmneziaWG</h2>
-  <div style="display:flex; gap:10px; margin-bottom:20px;">
-    <button id="genBtn" onclick="generate()">Сгенерировать и скачать .conf</button>
-    <a id="downloadBtn" class="hidden" download="warp.conf">Скачать warp.conf</a>
+  <p>Нажмите кнопку ниже, чтобы сгенерировать конфигурацию и сразу скачать <code>warp.conf</code>.</p>
+  
+  <div class="btn-group">
+    <button id="genBtn" onclick="generateConfig()">Сгенерировать и скачать .conf</button>
+    <a id="downloadBtn" class="download-btn hidden" download="warp.conf">Скачать warp.conf повторно</a>
   </div>
-  <pre id="output">Нажмите кнопку для генерации...</pre>
+
+  <h3>Конфигурация:</h3>
+  <pre id="output">Нажмите кнопку выше для запуска генерации...</pre>
 
   <script>
+    // URL вашего Cloudflare Worker
     const WORKER_URL = 'https://damp-meadow-fa92.bbwhnsjjzjsjhs.workers.dev/';
     let currentBlobUrl = null;
 
-    async function generate() {
+    async function generateConfig() {
       const genBtn = document.getElementById('genBtn');
       const downloadBtn = document.getElementById('downloadBtn');
       const out = document.getElementById('output');
 
       genBtn.disabled = true;
       downloadBtn.classList.add('hidden');
-      out.innerText = "Генерация... Пожалуйста, подождите...";
+      out.innerText = "Запрос к серверу... Генерация ключей и регистрация WARP...";
 
       try {
-        const res = await fetch(WORKER_URL);
-        if (!res.ok) throw new Error("Ошибка получения данных: " + res.statusText);
+        const response = await fetch(WORKER_URL);
+        
+        if (!response.ok) {
+          throw new Error(`Ошибка сервера (${response.status}): ${response.statusText}`);
+        }
 
-        const configText = await res.text();
+        const configText = await response.text();
+        
+        // Проверка, что вернулся именно конфиг, а не JSON с ошибкой
+        if (configText.trim().startsWith('{') && configText.includes('"error"')) {
+          const errJson = JSON.parse(configText);
+          throw new Error(errJson.error || "Неизвестная ошибка Worker");
+        }
+
+        // Выводим полученный конфиг на страницу
         out.innerText = configText;
 
+        // Создаем бинарный Blob (octet-stream), чтобы браузер гарантированно выдал .conf
         const blob = new Blob([configText], { type: 'application/octet-stream' });
-        if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+        
+        if (currentBlobUrl) {
+          URL.revokeObjectURL(currentBlobUrl);
+        }
         currentBlobUrl = URL.createObjectURL(blob);
 
+        // Настраиваем видимую кнопку повторного скачивания
         downloadBtn.href = currentBlobUrl;
+        downloadBtn.setAttribute('download', 'warp.conf');
         downloadBtn.classList.remove('hidden');
 
-        const temp = document.createElement('a');
-        temp.href = currentBlobUrl;
-        temp.setAttribute('download', 'warp.conf');
-        document.body.appendChild(temp);
-        temp.click();
-        temp.remove();
+        // Автоматически запускаем скачивание файла warp.conf
+        const tempLink = document.createElement('a');
+        tempLink.href = currentBlobUrl;
+        tempLink.setAttribute('download', 'warp.conf');
+        document.body.appendChild(tempLink);
+        tempLink.click();
+        tempLink.remove();
 
       } catch (err) {
-        out.innerText = "❌ Ошибка: " + err.message;
+        out.innerText = "❌ Не удалось получить конфиг:\n" + err.message;
       } finally {
         genBtn.disabled = false;
       }
     }
   </script>
+
 </body>
 </html>
  
