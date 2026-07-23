@@ -145,6 +145,16 @@
       return btoa(s);
     }
 
+    // Вспомогательная функция для генерации уникального имени файла
+    function generateRandomFileName() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let randomSuffix = '';
+      for (let i = 0; i < 5; i++) {
+        randomSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return `WARP_${randomSuffix}.conf`;
+    }
+
     // --- API Взаимодействие с Cloudflare ---
     async function registerWarp(pubB64) {
       const tos = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
@@ -207,21 +217,24 @@ Endpoint = 162.159.192.1:500`;
 
       genBtn.disabled = true;
       downloadBtn.classList.add('hidden');
-      out.innerText = "1/3 Генерация ключей...\n";
+      out.innerText = "1/3 Генерация ключей...
+";
 
       try {
         const pair = generateKeyPair();
         const privB64 = b64(pair.privateKey);
         const pubB64 = b64(pair.publicKey);
 
-        out.innerText += "2/3 Регистрация в Cloudflare WARP...\n";
+        out.innerText += "2/3 Регистрация в Cloudflare WARP...
+";
         const regData = await registerWarp(pubB64);
         const id = regData.result?.id;
         const token = regData.result?.token;
 
         if (!id || !token) throw new Error('Ошибка регистрации: ' + JSON.stringify(regData));
 
-        out.innerText += "3/3 Активация WARP и сборка конфигурации...\n";
+        out.innerText += "3/3 Активация WARP и сборка конфигурации...
+";
         const warpData = await enableWarp(id, token);
         const cfg = warpData.result?.config;
         if (!cfg) throw new Error('Ошибка включения WARP: ' + JSON.stringify(warpData));
@@ -235,21 +248,25 @@ Endpoint = 162.159.192.1:500`;
         const wgConf = buildConfig(privB64, peerPub, v4, v6);
         out.innerText = wgConf;
 
-        // ИСПРАВЛЕНИЕ: Используем 'application/octet-stream' вместо 'text/plain'
+        // Создаем Blob
         const blob = new Blob([wgConf], { type: 'application/octet-stream' });
         if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
         currentBlobUrl = URL.createObjectURL(blob);
 
-        // ИСПРАВЛЕНИЕ: Принудительно задаем атрибут download и имя файла
+        // Динамическая генерация имени файла, например WARP_A4B82.conf
+        const fileName = generateRandomFileName();
+
         downloadBtn.href = currentBlobUrl;
-        downloadBtn.setAttribute('download', 'warp.conf');
+        downloadBtn.setAttribute('download', fileName);
+        downloadBtn.innerText = `Скачать повторно ${fileName}`;
         downloadBtn.classList.remove('hidden');
 
         // Авто-скачивание файла
         downloadBtn.click();
 
       } catch (err) {
-        out.innerText = "❌ Ошибка:\n" + err.message;
+        out.innerText = "❌ Ошибка:
+" + err.message;
       } finally {
         genBtn.disabled = false;
       }
@@ -258,4 +275,3 @@ Endpoint = 162.159.192.1:500`;
 
 </body>
 </html>
- 
