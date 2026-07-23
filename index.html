@@ -2,38 +2,121 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>WARP Config Generator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Генератор Конфига WireGuard</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #121212; color: #fff; }
-    button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
-    pre { background: #1e1e1e; padding: 15px; border-radius: 5px; overflow-x: auto; color: #00ff66; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #121212;
+      color: #e0e0e0;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    button, a.download-btn {
+      background-color: #f6821f;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: background 0.2s;
+    }
+    button:hover, a.download-btn:hover {
+      background-color: #e06d10;
+    }
+    button:disabled {
+      background-color: #555;
+      cursor: not-allowed;
+    }
+    a.download-btn.hidden {
+      display: none;
+    }
+    pre {
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      color: #00ff66;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
-  <h2>Генератор AmneziaWG / WireGuard</h2>
-  <button onclick="generate()">Сгенерировать конфиг</button>
-  <pre id="output">Нажмите кнопку для генерации...</pre>
+
+  <h2>Генератор WireGuard / AmneziaWG</h2>
+  <p>Нажмите кнопку ниже, чтобы сгенерировать и скачать новый `.conf` файл.</p>
+  
+  <div class="btn-group">
+    <button id="genBtn" onclick="generateConfig()">Сгенерировать конфиг</button>
+    <a id="downloadBtn" class="download-btn hidden" download="warp.conf">Загрузить warp.conf</a>
+  </div>
+
+  <h3>Результат:</h3>
+  <pre id="output">Нажмите кнопку для запуска...</pre>
 
   <script>
-    const P = 2n ** 255n - 19n;
-    const BASE_POINT = new Uint8Array(32); BASE_POINT[0] = 9;
+    const WORKER_URL = 'https://damp-meadow-fa92.bbwhnsjjzjsjhs.workers.dev/';
+    let currentBlobUrl = null;
 
-    function clamp(k) { k[0] &= 248; k[31] &= 127; k[31] |= 64; }
-    function decodeLE(s) { let r = 0n; for (let i = 31; i >= 0; i--) r = (r << 8n) | BigInt(s[i]); return r; }
-    function encodeLE(x) { const r = new Uint8Array(32); for (let i = 0; i < 32; i++) { r[i] = Number(x & 0xffn); x >>= 8n; } return r; }
-    function modPow(a, e) { let r = 1n; a %= P; while (e > 0n) { if (e & 1n) r = (r * a) % P; a = (a * a) % P; e >>= 1n; } return r; }
+    async function generateConfig() {
+      const genBtn = document.getElementById('genBtn');
+      const downloadBtn = document.getElementById('downloadBtn');
+      const out = document.getElementById('output');
 
-    function x25519(scalarBytes, uBytes) {
-      clamp(scalarBytes); const u = decodeLE(uBytes);
-      let x1 = u, x2 = 1n, z2 = 0n, x3 = u, z3 = 1n, swap = 0;
-      const s = decodeLE(scalarBytes);
-      for (let t = 254; t >= 0; t--) {
-        const kt = Number((s >> BigInt(t)) & 1n);
-        swap ^= kt;
-        if (swap) { let t; t = x2; x2 = x3; x3 = t; t = z2; z2 = z3; z3 = t; }
-        swap = kt;
-        const A = (x2 + z2) % P, AA = (A * A) % P, B = (x2 - z2 + P) % P, BB = (B * B) % P;
-        const E = (AA - BB + P) % P, C = (x3 + z3) % P, D = (x3 - z3 + P) % P;
+      // Блокируем кнопку на время генерации и скрываем старую ссылку скачивания
+      genBtn.disabled = true;
+      downloadBtn.classList.add('hidden');
+      out.innerText = "Генерация... Пожалуйста, подождите...";
+
+      try {
+        const response = await fetch(WORKER_URL);
+        
+        if (!response.ok) {
+          throw new Error(`Ошибка сервера: ${response.status} ${response.statusText}`);
+        }
+
+        const configText = await response.text();
+        out.innerText = configText;
+
+        // Создаем Blob объект с текстом конфига
+        const blob = new Blob([configText], { type: 'text/plain;charset=utf-8' });
+        
+        // Освобождаем старую ссылку из памяти, если она была
+        if (currentBlobUrl) {
+          URL.revokeObjectURL(currentBlobUrl);
+        }
+        
+        currentBlobUrl = URL.createObjectURL(blob);
+
+        // Настраиваем кнопку скачивания
+        downloadBtn.href = currentBlobUrl;
+        downloadBtn.classList.remove('hidden');
+
+        // Автоматически запускаем скачивание файла при завершении
+        downloadBtn.click();
+
+      } catch (err) {
+        out.innerText = "Не удалось получить конфиг:\n" + err.message;
+      } finally {
+        genBtn.disabled = false;
+      }
+    }
+  </script>
+
+</body>
+</html>
         const DA = (D * A) % P, CB = (C * B) % P, sum = (DA + CB) % P;
         x3 = (sum * sum) % P; const diff = (DA - CB + P) % P;
         z3 = (u * ((diff * diff) % P)) % P; x2 = (AA * BB) % P;
